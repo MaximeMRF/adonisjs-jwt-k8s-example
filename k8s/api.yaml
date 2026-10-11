@@ -1,0 +1,57 @@
+# The AdonisJS API, in the default namespace: http://my-api.default.svc
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-api
+  namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-api
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-api
+  template:
+    metadata:
+      labels:
+        app: my-api
+    spec:
+      # its token is mounted in the pod: the API uses it to read the JWKS
+      serviceAccountName: my-api
+      containers:
+        - name: api
+          image: ghcr.io/maximemrf/adonisjs-jwt-k8s-example:latest
+          ports:
+            - containerPort: 3333
+          env:
+            - name: K8S_AUDIENCE
+              value: my-api
+            # your cluster's issuer: kubectl get --raw /.well-known/openid-configuration
+            - name: K8S_ISSUER
+              value: https://kubernetes.default.svc.cluster.local
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3333
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-api
+  namespace: default
+spec:
+  selector:
+    app: my-api
+  ports:
+    - port: 80
+      targetPort: 3333

@@ -7,31 +7,15 @@
 |
 */
 
-import { middleware } from '#start/kernel'
 import router from '@adonisjs/core/services/router'
-import { controllers } from '#generated/controllers'
+import { middleware } from '#start/kernel'
 
-router.get('/', () => {
-  return { hello: 'world' }
-})
+// probes
+router.get('health', () => ({ ok: true }))
 
 router
-  .group(() => {
-    router
-      .group(() => {
-        router.post('signup', [controllers.NewAccount, 'store'])
-        router.post('login', [controllers.AccessTokens, 'store'])
-      })
-      .prefix('auth')
-      .as('auth')
-
-    router
-      .group(() => {
-        router.get('profile', [controllers.Profile, 'show'])
-        router.post('logout', [controllers.AccessTokens, 'destroy'])
-      })
-      .prefix('account')
-      .as('profile')
-      .use(middleware.auth())
+  .post('internal/jobs', async ({ auth }) => {
+    const service = auth.use('k8s').getUserOrFail()
+    return { calledBy: service.name }
   })
-  .prefix('/api/v1')
+  .use(middleware.auth({ guards: ['k8s'] }))

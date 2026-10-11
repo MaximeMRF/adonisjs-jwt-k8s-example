@@ -3,46 +3,21 @@ import { apiClient } from '@japa/api-client'
 import app from '@adonisjs/core/services/app'
 import type { Config } from '@japa/runner/types'
 import { pluginAdonisJS } from '@japa/plugin-adonisjs'
-import { dbAssertions } from '@adonisjs/lucid/plugins/db'
 import testUtils from '@adonisjs/core/services/test_utils'
-import { authApiClient } from '@adonisjs/auth/plugins/api_client'
-import { sessionApiClient } from '@adonisjs/session/plugins/api_client'
-import type { Registry } from '../.adonisjs/client/registry/schema.d.ts'
-
-/**
- * This file is imported by the "bin/test.ts" entrypoint file
- */
-declare module '@japa/api-client/types' {
-  interface RoutesRegistry extends Registry {}
-}
-
-/**
- * This file is imported by the "bin/test.ts" entrypoint file
- */
+import { cluster } from '#tests/helpers/fake_cluster'
 
 /**
  * Configure Japa plugins in the plugins array.
  * Learn more - https://japa.dev/docs/runner-config#plugins-optional
  */
-export const plugins: Config['plugins'] = [
-  assert(),
-  pluginAdonisJS(app),
-  dbAssertions(app),
-  apiClient(),
-  sessionApiClient(app),
-  authApiClient(app),
-]
+export const plugins: Config['plugins'] = [assert(), pluginAdonisJS(app), apiClient()]
 
 /**
- * Configure lifecycle function to run before and after all the
- * tests.
- *
- * The setup functions are executed before all the tests
- * The teardown functions are executed after all the tests
+ * The fake cluster serves the JWKS on the K8S_JWKS_URI of .env.test
  */
 export const runnerHooks: Required<Pick<Config, 'setup' | 'teardown'>> = {
-  setup: [],
-  teardown: [],
+  setup: [() => cluster.start()],
+  teardown: [() => cluster.stop()],
 }
 
 /**

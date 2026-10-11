@@ -1,0 +1,110 @@
+# Three pods call the API. Each Job succeeds when it gets the expected status.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jobs
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: worker
+  namespace: jobs
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: intruder
+  namespace: jobs
+---
+# worker is in the allowlist and sends a projected token for my-api: 200
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: worker
+  namespace: jobs
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: worker
+      restartPolicy: Never
+      containers:
+        - name: call
+          image: curlimages/curl:8.11.1
+          command: ["sh", "-c"]
+          args:
+            - |
+              code=$(curl -s --retry 30 --retry-delay 2 --retry-all-errors --connect-timeout 3 -o /tmp/body -w '%{http_code}' -X POST http://my-api.default.svc/internal/jobs \
+                -H "Authorization: Bearer $(cat /var/run/secrets/my-api/token)")
+              echo "$code $(cat /tmp/body)"
+              [ "$code" = 200 ]
+          volumeMounts:
+            - name: api-token
+              mountPath: /var/run/secrets/my-api
+              readOnly: true
+      volumes:
+        - name: api-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: my-api
+                  expirationSeconds: 3600
+---
+# intruder sends a valid token for my-api, but isn't in the allowlist: 401
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: intruder
+  namespace: jobs
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: intruder
+      restartPolicy: Never
+      containers:
+        - name: call
+          image: curlimages/curl:8.11.1
+          command: ["sh", "-c"]
+          args:
+            - |
+              code=$(curl -s --retry 30 --retry-delay 2 --retry-all-errors --connect-timeout 3 -o /tmp/body -w '%{http_code}' -X POST http://my-api.default.svc/internal/jobs \
+                -H "Authorization: Bearer $(cat /var/run/secrets/my-api/token)")
+              echo "$code $(cat /tmp/body)"
+              [ "$code" = 401 ]
+          volumeMounts:
+            - name: api-token
+              mountPath: /var/run/secrets/my-api
+              readOnly: true
+      volumes:
+        - name: api-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: my-api
+                  expirationSeconds: 3600
+---
+# worker again, with the default token every pod gets (audience: the API server): 401
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: default-token
+  namespace: jobs
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: worker
+      restartPolicy: Never
+      containers:
+        - name: call
+          image: curlimages/curl:8.11.1
+          command: ["sh", "-c"]
+          args:
+            - |
+              code=$(curl -s --retry 30 --retry-delay 2 --retry-all-errors --connect-timeout 3 -o /tmp/body -w '%{http_code}' -X POST http://my-api.default.svc/internal/jobs \
+                -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)")
+              echo "$code $(cat /tmp/body)"
+              [ "$code" = 401 ]

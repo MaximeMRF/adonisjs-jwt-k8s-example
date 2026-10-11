@@ -22,6 +22,9 @@ export default await Env.create(new URL('../', import.meta.url), {
   APP_KEY: Env.schema.secret(),
   APP_URL: Env.schema.string({ format: 'url', tld: false }),
 
-  // Session
-  SESSION_DRIVER: Env.schema.enum(['cookie', 'memory', 'database'] as const),
+  // Kubernetes ServiceAccount tokens (defaults: kubeadm and k3s, from inside the cluster)
+  K8S_JWKS_URI: Env.schema.string.optional({ format: 'url', tld: false }),
+  K8S_ISSUER: Env.schema.string.optional(),
+  K8S_AUDIENCE: Env.schema.string.optional(),
+  K8S_SA_DIR: Env.schema.string.optional(),
 })
