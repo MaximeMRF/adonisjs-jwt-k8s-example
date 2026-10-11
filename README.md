@@ -57,6 +57,21 @@ The guard is configured with environment variables, which default to what works 
 
 `APP_KEY` isn't used by the `k8s` guard, so the image generates one at startup when it's not set.
 
+## What it protects against, and what it doesn't
+
+ServiceAccount tokens remove the shared secret between your services. There's no API key to leak from an environment variable or a Git repository, and no one can forge an identity without the cluster's signing key. The audience also works both ways: a token for `my-api` is rejected by the Kubernetes API server, so a compromised API can't reuse the tokens it receives to drive the cluster.
+
+The security boundary becomes Kubernetes RBAC, and a few things stay your job:
+
+- **A compromised pod is that service.** An attacker inside the `worker` pod reads its token and calls the API as `worker` for as long as they stay in the pod. Authorize per service, so each ServiceAccount can only call the routes it needs.
+- **Whoever can get a token is that service.** Creating pods in the `jobs` namespace, `exec` into its pods, or the `create serviceaccounts/token` permission all give a `worker` token. Keep those rights tight.
+- **The bearer token travels over plain HTTP.** This example calls `http://my-api.default.svc`, so anyone who can sniff the cluster's traffic sees the token. Use TLS, or a service mesh with mTLS, if that's in your threat model.
+- **Keep internal routes internal.** Don't expose `/internal/*` through your ingress, and restrict who can reach the API with a NetworkPolicy. Your CNI has to enforce it.
+- **Never turn off TLS verification on the JWKS fetch.** The keys are public, but someone in the middle could serve their own and sign any token.
+- **Revocation isn't immediate.** Tokens are verified offline, so a token stays valid until its `exp`, even if its pod is gone. Keep `expirationSeconds` short (the minimum is 600), or call the `TokenReview` API if you need instant revocation.
+
+You don't need an API key on top: it would bring back a secret to manage without closing any of these gaps.
+
 ## Tests
 
 ```sh
